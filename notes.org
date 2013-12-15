@@ -1,0 +1,48 @@
+* You Only Drop Once
+
+** Synopsis
+   You only get one item. Juggle it. If you drop it, you lose.
+   Different items with different properties (way they bounce off
+   target, how do targets react to hit, ...). Items can drop down
+   gaps, some break when you drop them, later in development some
+   might trigger minigames on drop. Different targets behave
+   differently in that they might move, take more than one hit to kill
+   or even attack the player. Different ways of winning a level,
+   depending on item, e.g. shove enemies to target location, destroy
+   all enemies, etc.
+   
+   You control your character's movement with WASD/Arrows and viewing
+   direction with the mouse. Left-click throws item. Catch item
+   before it lands on the ground by moving to landing spot, maybe
+   draw a graphic there. 
+
+** Outline [0/4]
+*** TODO State Machine
+    - Screen states
+      - start menu, level select, pause, playing, level-win(/lose?)
+      - generics for update, draw, handle event
+    - Character states
+      - idle, walking, throwing, ...
+      - Contains data like current item, health
+      - Not sure if same class for player and enemies
+        Keep it simple, though. No reason to go super generic for this.
+        DISCUSS ABOOT THIS WHEN AWAKERER
+*** TODO Level format
+    - Probably a 2d grid of tiles.
+    - Write 2-3 initial levels for testing, can write more later.
+      1. Wide-open level to test bouncing
+      2. Level with gaps
+    - Should absolu^H^H^H^H^H^Hnot write level editor.
+*** TODO Drawing
+    - Prioritize draw method for game-state
+    - Use character state for current animation frame
+*** TODO Game logic
+    - Logic should be decoupled from frame-rate (use dt)
+    - Write event methods for states
+    - Write update methods for states
+      - alter character state in this
+*** TODO Graphics
+    - Make 'em!
+    - Sprite sheets probably
+    - Tile-based levels
+    - Animation sheets for characters
