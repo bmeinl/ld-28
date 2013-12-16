@@ -5,7 +5,8 @@
   :description "Describe ld-28 here"
   :author "Your Name <your.name@example.com>"
   :license "Specify license here"
-  :depends-on (#:lispbuilder-sdl)
+  :depends-on (#:lispbuilder-sdl
+               #:lispbuilder-sdl-ttf)
   :components ((:file "package")
                (:file "ld-28")))
 

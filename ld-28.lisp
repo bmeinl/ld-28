@@ -55,8 +55,7 @@
        :for s :in '("Press Right to win the level!"
                     "Left to go back to previously beat levels."
                     "Escape to go back to menu.")
-       :do (sdl:draw-string-solid-* s 10 (* 10 (1+ i))))
-    )
+       :do (sdl:draw-string-solid-* s 10 (* 10 (1+ i)))))
   
   (sdl:with-font (font (make-instance 'SDL:ttf-font-definition
                                       :size 72
