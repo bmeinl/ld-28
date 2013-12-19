@@ -30,12 +30,11 @@
                                    (25 . 25)
                                    (-25 . 25))
                           :auto-vectorize t)
-   :enemy (make-instance 'entity
-                         :shape '((-25 . -25)
-                                  (25 . -25)
-                                  (25 . 25)
-                                  (-25 . 25))
-                         :auto-vectorize t)))
+    :enemy (make-instance 'entity
+                          :shape '((170 . 78) ; notice how this triangle isn't fixed around origin
+                                   (220 . 78) ; but it doesn't matter because of auto-vectorize
+                                   (195 . 128))
+                          :auto-vectorize t)))
 
 (defclass entity ()
   ((shape :accessor shape
@@ -47,10 +46,15 @@
    :auto-vectorize nil))
 
 ;;; If we pass :auto-vectorize t to make-instance 'entity, we can pass
-;;; :shape as list of (x . y) conses and it'll convert them to lm:vectors for us
+;;; :shape as list of (x . y) conses and it'll convert them to lm:vectors
+;;; centered on origin for us
 (defmethod initialize-instance :after ((e entity) &key shape auto-vectorize)
   (when auto-vectorize
-    (setf (shape e) (mapcar 'cons->vector3 shape))))
+    (let* ((vertices (mapcar 'cons->vector3 shape))
+           (center (shape-center vertices))
+           (trans (lm:create-translation-matrix (list (- (lm:x center))
+                                                      (- (lm:y center))))))
+      (setf (shape e) (mapcar (lambda (v) (lm:* trans v)) vertices)))))
 
 ;;; UPDATE METHODS
 ;;; ==============
