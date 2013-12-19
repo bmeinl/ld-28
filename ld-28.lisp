@@ -39,8 +39,7 @@
    :auto-vectorize nil))
 
 ;;; If we pass :auto-vectorize t to make-instance 'entity, we can pass
-;;; :shape as list of (x . y) conses and it'll convert them to
-;;; lm:vectors for us
+;;; :shape as list of (x . y) conses and it'll convert them to lm:vectors for us
 (defmethod initialize-instance :after ((e entity) &key shape auto-vectorize)
   (when auto-vectorize
     (setf (shape e) (mapcar 'cons->vector3 shape))))
@@ -72,6 +71,11 @@
 
 (defmethod draw ((screen game-screen))
   (sdl:clear-display sdl:*black*)
+  ;; border around the game so I can see the edges w/ my messed up windowing...
+  (sdl:draw-rectangle-* 0 0 (aref (sdl:video-dimensions) 0) (aref (sdl:video-dimensions) 1)
+                        :color (sdl:color :r 90 :g 90 :b 90))
+  ;; short in-game instructions
+  (sdl:draw-string-solid-* "Arrow keys to move, Q/W to rotate" 10 10 :color (sdl:color :r 90 :g 90 :b 90))
   (with-accessors ((p player)) screen
     (draw-shape (mapcar (lambda (v) (lm:* (transform p) v))
                         (shape p)))))
@@ -101,13 +105,15 @@
                        (2 (sdl:push-quit-event))))))
 
 (defmethod handle-key ((screen game-screen) key)
-  (with-accessors ((trans transform)) (player *screen*)
+  (with-accessors ((trans transform) (s shape)) (player *screen*)
     (case key
       (:sdl-key-escape (sdl:push-quit-event))
-      (:sdl-key-up (setf trans(lm:* trans (lm:create-translation-matrix (list 0 (- +speed+))))))
-      (:sdl-key-down (setf trans(lm:* trans (lm:create-translation-matrix (list 0 +speed+)))))
-      (:sdl-key-left (setf trans(lm:* trans (lm:create-translation-matrix (list (- +speed+) 0)))))
-      (:sdl-key-right (setf trans(lm:* trans (lm:create-translation-matrix (list +speed+ 0))))))))
+      (:sdl-key-up (setf trans (lm:* (lm:create-translation-matrix (list 0 (- +speed+))) trans)))
+      (:sdl-key-down (setf trans (lm:* (lm:create-translation-matrix (list 0 +speed+)) trans)))
+      (:sdl-key-left (setf trans (lm:* (lm:create-translation-matrix (list (- +speed+) 0)) trans)))
+      (:sdl-key-right (setf trans (lm:* (lm:create-translation-matrix (list +speed+ 0)) trans)))
+      (:sdl-key-w (setf trans (lm:* trans (shape-rotation s +speed+))))
+      (:sdl-key-q (setf trans (lm:* trans (shape-rotation s (- +speed+))))))))
 
 ;;; MAIN LOOP
 ;;; =========
@@ -134,3 +140,18 @@
 
 (defun vector->point (vector)
   (sdl:point :x (lm:x vector) :y (lm:y vector)))
+
+(defun shape-center (vertices)
+  (let* ((xs (mapcar 'lm:x vertices))
+         (ys (mapcar 'lm:y vertices))
+         (center-x (/ (reduce '+ xs) (length xs)))
+         (center-y (/ (reduce '+ ys) (length ys))))
+    (lm:vector center-x center-y 1)))
+
+;;; gives us a matrix to rotate the given shape
+(defun shape-rotation (vertices degrees)
+  (let* ((center (shape-center vertices))
+         (trans (lm:create-translation-matrix (list (- (lm:x center))
+                                                    (- (lm:y center)))))
+         (rot (lm:rotation-z 3 (lm:to-radians degrees))))
+    (lm:* rot trans)))
