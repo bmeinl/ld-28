@@ -101,14 +101,23 @@
     (draw-shape (mapcar (lambda (v) (lm:* (lm:create-translation-matrix (mouse-in-world-coords))
                                           (transform e)
                                           v))
-                        (shape e)))))
+                        (shape e)))
+    ;; draw shape centers for debugging
+    (sdl:draw-pixel (vector->point
+                     (shape-center
+                      (mapcar (lambda (v) (lm:* (transform p) v))
+                              (shape p)))))
+    (sdl:draw-pixel (vector->point
+                     (shape-center
+                      (mapcar (lambda (v) (lm:* (lm:create-translation-matrix (mouse-in-world-coords))
+                                                (transform e)
+                                                v))
+                              (shape e)))))))
+
 
 (defun draw-shape (vertices)
-  (sdl:draw-polygon (mapcar (lambda (v)
-                              (vector->point
-                               ;; Add half the window dimensions to center origin
-                               (lm:+ v (lm:vector (/ (window-width) 2) (/ (window-height) 2) 0))))
-                            vertices)))
+  (sdl:draw-polygon
+   (mapcar 'vector->point vertices)))
 
 ;;; HANDLE KEY METHODS
 ;;; ==================
@@ -116,13 +125,13 @@
 (defmethod handle-key ((screen menu-screen) key)
   (case key 
     (:sdl-key-escape (sdl:push-quit-event))
-    (:sdl-key-up (setf (menu-selection screen)
-                       (mod (1- (menu-selection screen))
-                            (length (menu-items screen)))))
-    (:sdl-key-down (setf (menu-selection screen)
-                         (mod (1+ (menu-selection screen))
-                              (length (menu-items screen)))))
-    (:sdl-key-return (case (menu-selection screen)
+    (:sdl-key-up (setf (selection screen)
+                       (mod (1- (selection screen))
+                            (length (options screen)))))
+    (:sdl-key-down (setf (selection screen)
+                         (mod (1+ (selection screen))
+                              (length (options screen)))))
+    (:sdl-key-return (case (selection screen)
                        (0 (setf *screen* (make-instance 'game-screen)))
                        (2 (sdl:push-quit-event))))))
 
@@ -158,6 +167,7 @@
     (sdl:window width height :title-caption "You Only Drop Once")
     (setf (sdl:frame-rate) 60)
     (sdl:initialise-default-font sdl:*font-8x8*)
+    (sdl:show-cursor nil)
     (sdl:with-events ()
       (:quit-event () t)
       (:key-down-event (:key key) (handle-key *screen* key))
@@ -173,8 +183,10 @@
 (defun cons->vector3 (cons)
   (lm:vector (car cons) (cdr cons) 1))
 
+;;; Adding half of window-width/height to center origin in window
 (defun vector->point (vector)
-  (sdl:point :x (lm:x vector) :y (lm:y vector)))
+  (sdl:point :x (+ (/ (window-width) 2) (lm:x vector))
+             :y (+ (/ (window-height) 2) (lm:y vector))))
 
 (defun shape-center (vertices)
   (let* ((xs (mapcar 'lm:x vertices))
@@ -213,12 +225,18 @@
 (defun make-line (p1 p2)
   (lm:to-vector (lm:- p1 p2) :dimension 2))
 
-;;; gives length of a shape when projected onto (unit) vector
-(defun projected-length (shape vector)
-  (let ((lengths (mapcar (lambda (point)
+;;; gives (min . max) of where the shape falls onto vector line
+(defun projected-coords (shape vector)
+  (let ((coord (mapcar (lambda (point)
                            (lm:dot-product point (lm:to-vector vector :dimension 3)))
                          shape)))
-    (- (apply 'max lengths) (apply 'min lengths))))
+    (cons (apply 'min coord) (apply 'max coord))))
+
+;;; test for overlap between (min . max) conses
+(defun overlap (a b)
+  (not (if (< (car a) (car b))
+           (<= (cdr a) (car b))
+           (<= (cdr b) (car a)))))
 
 (defun collision? (entity1 entity2)
   (with-accessors ((shape1 shape) (t1 transform)) entity1
@@ -228,21 +246,17 @@
                                            t2
                                            v))
                          shape2))
-             (lines1 (mapcar 'make-line
-                             s1
-                             (append (cdr s1) (list (car s1)))))
-             (lines2 (mapcar 'make-line
-                             s2
-                             (append (cdr s2) (list (car s2)))))
-             (normals1 (mapcar 'normal lines1))
-             (normals2 (mapcar 'normal lines2))
-             (center1 (shape-center s1))
-             (center2 (shape-center s2)))
+             (normals1 (normals shape1 t1))
+             (normals2 (normals shape2 (lm:* (lm:create-translation-matrix (mouse-in-world-coords))
+                                             t2))))
         (loop
            :for n in (append normals1 normals2)
-           :if (> (lm:dot-product (lm:to-vector (lm:- center1 center2) :dimension 2) (lm:to-vector n))
-                  (/ (+ (projected-length s1 n)
-                        (projected-length s2 n))
-                     2))
+           :if (not (overlap (projected-coords s1 n) (projected-coords s2 n)))
            :return nil
            :finally (return t))))))
+
+;;; returns list of normals of transformed shape
+(defun normals (shape transform)
+  (let* ((s (mapcar (lambda (v) (lm:* transform v)) shape))
+         (lines (mapcar 'make-line s (append (cdr s) (list (car s))))))
+    (mapcar 'normal lines)))
