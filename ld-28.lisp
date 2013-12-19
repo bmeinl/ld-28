@@ -3,6 +3,7 @@
 (in-package #:ld-28)
 
 (defvar *screen*)
+(defparameter *background-color* sdl:*black*)  ; we update this when a collision is detected
 
 (defconstant +speed+ 10)
 
@@ -37,8 +38,8 @@
                           :auto-vectorize t)))
 
 (defclass entity ()
-  ((shape :accessor shape
-          :initarg :shape)
+  ((shape :accessor shape               ; shape is in object coordinates, 
+          :initarg :shape)              ; so the origin is the shape's pivot point
    (transform :accessor transform
               :initarg :transform))
   (:default-initargs
@@ -59,11 +60,15 @@
 ;;; UPDATE METHODS
 ;;; ==============
 
+
 (defmethod update ((screen menu-screen))
   )
 
 (defmethod update ((screen game-screen))
-  )
+  (setf *background-color*
+        (if (collision? (player screen) (enemy screen))
+            (sdl:color :r 150 :g 50 :b 50)
+            sdl:*black*)))
 
 ;;; DRAW METHODS
 ;;; ============
@@ -82,13 +87,14 @@
                                                (sdl:color :r 100 :g 100 :b 100))))))
 
 (defmethod draw ((screen game-screen))
-  (sdl:clear-display sdl:*black*)
-  ;; border around the game so I can see the edges w/ my messed up windowing...
-  (sdl:draw-rectangle-* 0 0 (aref (sdl:video-dimensions) 0) (aref (sdl:video-dimensions) 1)
-                        :color (sdl:color :r 90 :g 90 :b 90))
-  ;; short in-game instructions
-  (sdl:draw-string-solid-* "Player: WASD & Q/W" 10 10 :color (sdl:color :r 90 :g 90 :b 90))
-  (sdl:draw-string-solid-* "Enemy: Mouse & Mouse Wheel" 10 20 :color (sdl:color :r 90 :g 90 :b 90))  
+  (sdl:clear-display *background-color*)
+  (sdl:with-color (_ (sdl:color :r 90 :g 90 :b 90))
+    ;; border around the game so I can see the edges w/ my messed up windowing...
+    (sdl:draw-rectangle-* 0 0 (window-width) (window-height))
+    ;; short in-game instructions
+    (sdl:draw-string-solid-* "Player: WASD & Q/W" 10 10)
+    (sdl:draw-string-solid-* "Enemy: Mouse & Mouse Wheel" 10 20)
+    (sdl:draw-string-solid-* "<ESC> to quit" (- (window-width) 120) (- (window-height) 18)))
   (with-accessors ((p player) (e enemy)) screen
     (draw-shape (mapcar (lambda (v) (lm:* (transform p) v))
                         (shape p)))
@@ -98,12 +104,11 @@
                         (shape e)))))
 
 (defun draw-shape (vertices)
-  (let ((dim (sdl:video-dimensions)))
-    (sdl:draw-polygon (mapcar (lambda (v)
-                                (vector->point
-                                 ;; Add half the window dimensions to center origin
-                                 (lm:+ v (lm:vector (/ (aref dim 0) 2) (/ (aref dim 1) 2) 0))))
-                              vertices))))
+  (sdl:draw-polygon (mapcar (lambda (v)
+                              (vector->point
+                               ;; Add half the window dimensions to center origin
+                               (lm:+ v (lm:vector (/ (window-width) 2) (/ (window-height) 2) 0))))
+                            vertices)))
 
 ;;; HANDLE KEY METHODS
 ;;; ==================
@@ -189,7 +194,55 @@
 (defun mouse-in-world-coords ()
   (let ((x (sdl:mouse-x))
         (y (sdl:mouse-y))
-        (w (aref (sdl:video-dimensions) 0))
-        (h (aref (sdl:video-dimensions) 1)))
+        (w (window-width))
+        (h (window-height)))
     (list (- x (/ w 2))
           (- y (/ h 2)))))
+
+(defun window-width ()
+  (aref (sdl:video-dimensions) 0))
+
+(defun window-height ()
+  (aref (sdl:video-dimensions) 1))
+
+;;; gives us the unit 2-vector normal
+(defun normal (vector)
+  (lm:normalise (lm:vector (- (lm:y vector)) (lm:x vector))))
+
+;;; Makes a line 2-vector out two 3-vector points
+(defun make-line (p1 p2)
+  (lm:to-vector (lm:- p1 p2) :dimension 2))
+
+;;; gives length of a shape when projected onto (unit) vector
+(defun projected-length (shape vector)
+  (let ((lengths (mapcar (lambda (point)
+                           (lm:dot-product point (lm:to-vector vector :dimension 3)))
+                         shape)))
+    (- (apply 'max lengths) (apply 'min lengths))))
+
+(defun collision? (entity1 entity2)
+  (with-accessors ((shape1 shape) (t1 transform)) entity1
+    (with-accessors ((shape2 shape) (t2 transform)) entity2
+      (let* ((s1 (mapcar (lambda (v) (lm:* t1 v)) shape1))
+             (s2 (mapcar (lambda (v) (lm:* (lm:create-translation-matrix (mouse-in-world-coords))
+                                           t2
+                                           v))
+                         shape2))
+             (lines1 (mapcar 'make-line
+                             s1
+                             (append (cdr s1) (list (car s1)))))
+             (lines2 (mapcar 'make-line
+                             s2
+                             (append (cdr s2) (list (car s2)))))
+             (normals1 (mapcar 'normal lines1))
+             (normals2 (mapcar 'normal lines2))
+             (center1 (shape-center s1))
+             (center2 (shape-center s2)))
+        (loop
+           :for n in (append normals1 normals2)
+           :if (> (lm:dot-product (lm:to-vector (lm:- center1 center2) :dimension 2) (lm:to-vector n))
+                  (/ (+ (projected-length s1 n)
+                        (projected-length s2 n))
+                     2))
+           :return nil
+           :finally (return t))))))
