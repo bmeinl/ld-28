@@ -2,8 +2,9 @@
 
 (in-package #:ld-28)
 
-;;; Only global thus far!
 (defvar *screen*)
+
+(defconstant +speed+ 10)
 
 ;;; CLASSES
 ;;; =======
@@ -37,6 +38,9 @@
    :transform (lm:make-identity 3)
    :auto-vectorize nil))
 
+;;; If we pass :auto-vectorize t to make-instance 'entity, we can pass
+;;; :shape as list of (x . y) conses and it'll convert them to
+;;; lm:vectors for us
 (defmethod initialize-instance :after ((e entity) &key shape auto-vectorize)
   (when auto-vectorize
     (setf (shape e) (mapcar 'cons->vector3 shape))))
@@ -68,7 +72,17 @@
 
 (defmethod draw ((screen game-screen))
   (sdl:clear-display sdl:*black*)
-  )
+  (with-accessors ((p player)) screen
+    (draw-shape (mapcar (lambda (v) (lm:* (transform p) v))
+                        (shape p)))))
+
+(defun draw-shape (vertices)
+  (let ((dim (sdl:video-dimensions)))
+    (sdl:draw-polygon (mapcar (lambda (v)
+                                (vector->point
+                                 ;; Add half the window dimensions to center origin
+                                 (lm:+ v (lm:vector (/ (aref dim 0) 2) (/ (aref dim 1) 2) 0))))
+                              vertices))))
 
 ;;; HANDLE KEY METHODS
 ;;; ==================
@@ -87,10 +101,13 @@
                        (2 (sdl:push-quit-event))))))
 
 (defmethod handle-key ((screen game-screen) key)
-  (case key
-    (:sdl-key-escape (sdl:push-quit-event))
-    (:sdl-key-left (setf (game-level screen) (max 0 (1- (game-level screen)))))
-    (:sdl-key-right (incf (game-level screen)))))
+  (with-accessors ((trans transform)) (player *screen*)
+    (case key
+      (:sdl-key-escape (sdl:push-quit-event))
+      (:sdl-key-up (setf trans(lm:* trans (lm:create-translation-matrix (list 0 (- +speed+))))))
+      (:sdl-key-down (setf trans(lm:* trans (lm:create-translation-matrix (list 0 +speed+)))))
+      (:sdl-key-left (setf trans(lm:* trans (lm:create-translation-matrix (list (- +speed+) 0)))))
+      (:sdl-key-right (setf trans(lm:* trans (lm:create-translation-matrix (list +speed+ 0))))))))
 
 ;;; MAIN LOOP
 ;;; =========
@@ -113,4 +130,7 @@
 ;;; =====================
 
 (defun cons->vector3 (cons)
-  (lm:vector (car cons) (cdr cons) 0))
+  (lm:vector (car cons) (cdr cons) 1))
+
+(defun vector->point (vector)
+  (sdl:point :x (lm:x vector) :y (lm:y vector)))
